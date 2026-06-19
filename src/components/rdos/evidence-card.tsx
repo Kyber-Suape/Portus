@@ -1,10 +1,10 @@
 "use client";
 
-import { CheckCircle2, ImageIcon, MapPin, XCircle } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, FileText, MapPin, Trash2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
-import { useAuthenticatedFileUrl } from "@/hooks/use-authenticated-file";
-import { RDO_EVIDENCE_VALIDATION_CONFIG } from "@/constants/rdo";
+import { RDO_EVIDENCE_GEO_STATUS_CONFIG, RDO_EVIDENCE_VALIDATION_CONFIG } from "@/constants/rdo";
+import { formatEvidenceTimestamp, formatFileSize } from "@/lib/format";
 import type { RdoEvidence } from "@/types/rdo";
 
 export interface EvidenceCardProps {
@@ -12,38 +12,85 @@ export interface EvidenceCardProps {
   /** Quando informado, exibe botões de validar/rejeitar a evidência (gated por `evidences:validate_geo` no chamador). */
   onValidate?: (validationStatus: "VALIDATED" | "REJECTED") => void;
   isValidating?: boolean;
+  onCaptionChange?: (caption: string) => void;
+  onRemove?: () => void;
 }
 
-export function EvidenceCard({ evidence, onValidate, isValidating }: EvidenceCardProps) {
-  const { url, isLoading } = useAuthenticatedFileUrl(evidence.url);
+export function EvidenceCard({ evidence, onValidate, isValidating, onCaptionChange, onRemove }: EvidenceCardProps) {
   const validation = RDO_EVIDENCE_VALIDATION_CONFIG[evidence.validationStatus];
+  const geo = RDO_EVIDENCE_GEO_STATUS_CONFIG[evidence.geoStatus];
+  const [caption, setCaption] = useState(evidence.caption ?? "");
+
+  const locationLine = [evidence.location?.city, evidence.location?.state].filter(Boolean).join(" — ");
+  const hasCoordinates = evidence.latitude != null && evidence.longitude != null;
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface">
-      <div className="flex aspect-video items-center justify-center bg-background">
-        {isLoading ? (
-          <Spinner className="size-5" />
-        ) : url && evidence.type === "PHOTO" ? (
-          // eslint-disable-next-line @next/next/no-img-element -- blob: URL local, não suportado por next/image
-          <img src={url} alt={evidence.caption ?? evidence.fileName} className="size-full object-cover" />
+      <div className="relative flex aspect-video items-center justify-center bg-background">
+        {evidence.type === "PHOTO" ? (
+          // eslint-disable-next-line @next/next/no-img-element -- URL local (data:/blob:), não suportada por next/image
+          <img src={evidence.url} alt={evidence.caption ?? evidence.fileName} className="size-full object-cover" />
+        ) : evidence.type === "VIDEO" ? (
+          <video src={evidence.url} controls className="size-full object-cover" />
         ) : (
-          <ImageIcon className="size-8 text-muted-foreground" aria-hidden="true" />
-        )}
-      </div>
-      <div className="p-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-sm font-medium text-foreground">{evidence.caption ?? evidence.fileName}</p>
-          <Badge tone={validation.tone}>{validation.label}</Badge>
-        </div>
-        {evidence.latitude != null && evidence.longitude != null && (
-          <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-            <MapPin className="size-3" aria-hidden="true" />
-            {evidence.latitude.toFixed(4)}, {evidence.longitude.toFixed(4)}
-          </p>
+          <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
+            <FileText className="size-8" aria-hidden="true" />
+            <span className="text-xs font-medium uppercase">{evidence.fileName.split(".").pop() ?? "Arquivo"}</span>
+          </div>
         )}
 
+        <span className="absolute right-2 top-2">
+          <Badge tone={validation.tone}>{validation.label}</Badge>
+        </span>
+
+        {hasCoordinates && (
+          <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-xs text-white">
+            <MapPin className="size-3" aria-hidden="true" />
+            {evidence.latitude!.toFixed(4)}, {evidence.longitude!.toFixed(4)}
+          </span>
+        )}
+
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label="Remover evidência"
+            className="focus-ring absolute right-2 bottom-2 rounded-full bg-black/60 p-1.5 text-white hover:bg-danger-600"
+          >
+            <Trash2 className="size-3.5" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="truncate text-sm font-medium text-foreground">{evidence.fileName}</p>
+          {evidence.sizeBytes != null && (
+            <span className="shrink-0 text-xs text-muted-foreground">{formatFileSize(evidence.sizeBytes)}</span>
+          )}
+        </div>
+
+        <input
+          type="text"
+          value={caption}
+          onChange={(e) => setCaption(e.target.value)}
+          onBlur={() => onCaptionChange?.(caption)}
+          placeholder="Adicionar legenda técnica..."
+          disabled={!onCaptionChange}
+          className="focus-ring h-8 w-full rounded-md border border-border bg-background px-2.5 text-xs text-foreground placeholder:text-muted-foreground disabled:cursor-default disabled:opacity-70"
+        />
+
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>{evidence.capturedAt ? formatEvidenceTimestamp(evidence.capturedAt) : "—"}</span>
+          {locationLine && <span className="truncate">{locationLine}</span>}
+        </div>
+
+        <Badge tone={geo.tone} className="self-start">
+          {geo.label}
+        </Badge>
+
         {onValidate && (
-          <div className="mt-2 flex gap-1.5">
+          <div className="mt-1 flex gap-1.5">
             <button
               type="button"
               disabled={isValidating}

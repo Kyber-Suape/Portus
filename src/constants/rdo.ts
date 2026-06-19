@@ -3,6 +3,7 @@ import type {
   GroundStatus,
   RdoActivityStatus,
   RdoEquipmentStatus,
+  RdoEvidenceGeoStatus,
   RdoEvidenceType,
   RdoEvidenceValidationStatus,
   RdoNonConformityStatus,
@@ -16,14 +17,18 @@ import type {
 export const RDO_STATUS_CONFIG: Record<RdoStatus, { label: string; tone: StatusTone }> = {
   DRAFT: { label: "Rascunho", tone: "muted" },
   SENT_TO_REVIEW: { label: "Enviado para revisão", tone: "warning" },
-  UNDER_EXTERNAL_REVIEW: { label: "Em revisão externa", tone: "warning" },
-  EXTERNAL_APPROVED: { label: "Aprovado (externo)", tone: "accent" },
-  REJECTED_BY_EXTERNAL: { label: "Reprovado (externo)", tone: "danger" },
-  UNDER_SUAPE_REVIEW: { label: "Em revisão SUAPE", tone: "warning" },
-  APPROVED: { label: "Aprovado", tone: "success" },
-  REJECTED_BY_SUAPE: { label: "Reprovado (SUAPE)", tone: "danger" },
-  SIGNATURE_PENDING: { label: "Aguardando assinatura", tone: "accent" },
+  UNDER_REVIEW: { label: "Em revisão", tone: "warning" },
+  CHANGES_REQUESTED: { label: "Ajustes solicitados", tone: "warning" },
+  REJECTED: { label: "Reprovado", tone: "danger" },
+  APPROVED_BY_REVIEWER_1: { label: "Aprovado pelo 1º aprovador", tone: "accent" },
+  APPROVED_BY_REVIEWER_2: { label: "Aprovado pelo 2º aprovador", tone: "accent" },
+  APPROVED_BY_REVIEWER_3: { label: "Aprovado pelo 3º aprovador", tone: "accent" },
+  FINAL_APPROVED: { label: "Aprovação final concluída", tone: "success" },
+  LOCKED: { label: "Bloqueado", tone: "muted" },
+  SIGNATURE_PENDING: { label: "Aguardando assinaturas", tone: "accent" },
+  PARTIALLY_SIGNED: { label: "Parcialmente assinado", tone: "warning" },
   SIGNED: { label: "Assinado", tone: "success" },
+  COMPLETED: { label: "Finalizado", tone: "success" },
   REOPENED: { label: "Reaberto", tone: "warning" },
   CANCELED: { label: "Cancelado", tone: "muted" },
 };
@@ -96,8 +101,17 @@ export const RDO_EVIDENCE_VALIDATION_CONFIG: Record<RdoEvidenceValidationStatus,
   REJECTED: { label: "Rejeitada", tone: "danger" },
 };
 
-const EDITABLE_STATUSES: RdoStatus[] = ["DRAFT", "REJECTED_BY_EXTERNAL", "REJECTED_BY_SUAPE", "REOPENED"];
-const REOPENABLE_STATUSES: RdoStatus[] = ["APPROVED", "REJECTED_BY_SUAPE", "REJECTED_BY_EXTERNAL"];
+export const RDO_EVIDENCE_GEO_STATUS_CONFIG: Record<RdoEvidenceGeoStatus, { label: string; tone: StatusTone }> = {
+  VALIDATED: { label: "Geolocalização validada", tone: "success" },
+  PENDING: { label: "Geolocalização pendente", tone: "warning" },
+  UNAVAILABLE: { label: "Geolocalização indisponível", tone: "muted" },
+};
+
+const EDITABLE_STATUSES: RdoStatus[] = ["DRAFT", "CHANGES_REQUESTED", "REJECTED", "REOPENED"];
+/** Só faz sentido reabrir um RDO que já passou pelo bloqueio (aprovação final em diante). */
+const REOPENABLE_STATUSES: RdoStatus[] = ["SIGNATURE_PENDING", "PARTIALLY_SIGNED", "COMPLETED"];
+/** A partir daqui o RDO está bloqueado para edição — ver seção 6 do fluxo de aprovação. */
+const LOCKED_STATUSES: RdoStatus[] = ["SIGNATURE_PENDING", "PARTIALLY_SIGNED", "COMPLETED"];
 
 export function isRdoEditable(status: RdoStatus): boolean {
   return EDITABLE_STATUSES.includes(status);
@@ -105,4 +119,8 @@ export function isRdoEditable(status: RdoStatus): boolean {
 
 export function isRdoReopenable(status: RdoStatus): boolean {
   return REOPENABLE_STATUSES.includes(status);
+}
+
+export function isRdoLocked(status: RdoStatus): boolean {
+  return LOCKED_STATUSES.includes(status);
 }

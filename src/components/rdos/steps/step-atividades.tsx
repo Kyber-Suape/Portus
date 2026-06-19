@@ -19,8 +19,11 @@ function emptyActivity(): RdoActivityInput {
 }
 
 export function StepAtividades({ values, onChange }: RdoWizardStepProps) {
-  function updateActivity(index: number, field: keyof RdoActivityInput, value: string | boolean) {
-    const next = values.activities.map((activity, i) => (i === index ? { ...activity, [field]: value } : activity));
+  /** Atualiza um ou mais campos da atividade de uma só vez — evita perder alterações quando
+   * duas chamadas em sequência (ex.: aplicar sugestão + marcar `aiSuggestionUsed`) partiriam
+   * da mesma `values.activities` desatualizada se fossem despachadas separadamente. */
+  function updateActivity(index: number, patch: Partial<RdoActivityInput>) {
+    const next = values.activities.map((activity, i) => (i === index ? { ...activity, ...patch } : activity));
     onChange("activities", next);
   }
 
@@ -54,7 +57,7 @@ export function StepAtividades({ values, onChange }: RdoWizardStepProps) {
               key={index}
               index={index}
               activity={activity}
-              onChange={(field, value) => updateActivity(index, field, value)}
+              onChange={(patch) => updateActivity(index, patch)}
               onRemove={() => removeActivity(index)}
             />
           ))}
@@ -72,7 +75,7 @@ export function StepAtividades({ values, onChange }: RdoWizardStepProps) {
 interface ActivityCardProps {
   index: number;
   activity: RdoActivityInput;
-  onChange: (field: keyof RdoActivityInput, value: string | boolean) => void;
+  onChange: (patch: Partial<RdoActivityInput>) => void;
   onRemove: () => void;
 }
 
@@ -95,10 +98,9 @@ function ActivityCard({ index, activity, onChange, onRemove }: ActivityCardProps
     }
   }
 
-  async function handleUseSuggestion() {
+  function handleUseSuggestion() {
     if (!suggestion) return;
-    onChange("description", suggestion);
-    onChange("aiSuggestionUsed", true);
+    onChange({ description: suggestion, aiSuggestionUsed: true });
     setSuggestion(null);
   }
 
@@ -108,7 +110,7 @@ function ActivityCard({ index, activity, onChange, onRemove }: ActivityCardProps
     try {
       // Estrutura/placeholder: ainda não captura áudio real do microfone.
       const result = await aiService.transcribeAudio(new Blob(["placeholder"], { type: "audio/webm" }));
-      onChange("description", activity.description ? `${activity.description} ${result.transcript}` : result.transcript);
+      onChange({ description: activity.description ? `${activity.description} ${result.transcript}` : result.transcript });
     } catch (err) {
       setAiError(err instanceof ApiError ? err.message : "Não foi possível transcrever o áudio.");
     } finally {
@@ -139,7 +141,7 @@ function ActivityCard({ index, activity, onChange, onRemove }: ActivityCardProps
             <button
               key={category}
               type="button"
-              onClick={() => onChange("category", category)}
+              onClick={() => onChange({ category })}
               className={`focus-ring rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                 activity.category === category
                   ? "border-primary-600 bg-primary-50 text-primary-700"
@@ -156,9 +158,10 @@ function ActivityCard({ index, activity, onChange, onRemove }: ActivityCardProps
         label="Descrição detalhada"
         placeholder="Descreva as atividades executadas no período..."
         value={activity.description}
-        onChange={(e) => onChange("description", e.target.value)}
+        onChange={(e) => onChange({ description: e.target.value })}
         rows={4}
       />
+      <p className="-mt-1 text-right text-xs text-muted-foreground">{activity.description.length} caracteres</p>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-2">
@@ -174,7 +177,7 @@ function ActivityCard({ index, activity, onChange, onRemove }: ActivityCardProps
           label=""
           options={RDO_ACTIVITY_STATUS_OPTIONS}
           value={activity.status ?? "IN_PROGRESS"}
-          onChange={(e) => onChange("status", e.target.value as RdoActivityStatus)}
+          onChange={(e) => onChange({ status: e.target.value as RdoActivityStatus })}
           className="h-9 w-44"
         />
       </div>

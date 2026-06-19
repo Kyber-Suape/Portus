@@ -92,19 +92,23 @@ export function RdoReviewView({ rdo, onUpdated }: RdoReviewViewProps) {
             </Card>
           )}
 
-          {(rdo.teams.length > 0 || rdo.equipments.length > 0) && (
+          {(rdo.professionals.length > 0 || rdo.equipments.length > 0) && (
             <Card className="p-4">
               <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-primary-900">
                 <Users className="size-4" aria-hidden="true" />
                 Equipe e Equipamentos
               </h4>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {rdo.teams.map((team) => (
-                  <div key={team.id} className="rounded-lg bg-background p-3">
-                    <p className="text-sm font-semibold text-foreground">{team.name}</p>
+                {rdo.professionals.map((professional) => (
+                  <div key={professional.id} className="rounded-lg bg-background p-3">
+                    <p className="text-sm font-semibold text-foreground">{professional.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {team.function} · {team.quantity} pessoa(s)
+                      {professional.function}
+                      {professional.startTime && professional.endTime
+                        ? ` · ${professional.startTime} – ${professional.endTime}`
+                        : ""}
                     </p>
+                    {professional.notes && <p className="mt-1 text-xs text-muted-foreground">{professional.notes}</p>}
                   </div>
                 ))}
                 {rdo.equipments.map((equipment) => (
@@ -113,7 +117,10 @@ export function RdoReviewView({ rdo, onUpdated }: RdoReviewViewProps) {
                       <Truck className="size-3.5" aria-hidden="true" />
                       {equipment.name}
                     </p>
-                    <p className="text-xs text-muted-foreground">{equipment.identifier ?? "Sem identificação"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {equipment.identifier ?? "Sem identificação"}
+                      {equipment.startTime && equipment.endTime ? ` · ${equipment.startTime} – ${equipment.endTime}` : ""}
+                    </p>
                   </div>
                 ))}
               </div>

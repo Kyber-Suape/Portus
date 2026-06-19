@@ -1,21 +1,23 @@
 import { Plus, Trash2, Truck, UserCog, Users } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { RDO_EQUIPMENT_STATUS_OPTIONS } from "@/constants/rdo";
+import { RDO_EQUIPMENT_NAME_OPTIONS } from "@/constants/rdo-equipment";
 import { WORK_FUNCTION_OPTIONS } from "@/constants/work-functions";
-import type { RdoEquipmentInput, RdoEquipmentStatus, RdoTeamInput } from "@/types/rdo";
+import { formatTimeInput } from "@/lib/validators";
+import type { RdoEquipmentInput, RdoEquipmentStatus, RdoProfessionalInput } from "@/types/rdo";
 import type { RdoWizardStepProps } from "../rdo-wizard-types";
 
-function emptyTeam(): RdoTeamInput {
-  return { workUserId: undefined, name: "", function: "", quantity: 1 };
+function emptyProfessional(): RdoProfessionalInput {
+  return { workUserId: undefined, name: "", function: "" };
 }
 
 function emptyEquipment(): RdoEquipmentInput {
-  return { name: "", quantity: 1, status: "IDLE" };
+  return { name: "", status: "IDLE" };
 }
 
 const IN_USE_STATUSES: RdoEquipmentStatus[] = ["IN_OPERATION", "MAINTENANCE"];
@@ -28,13 +30,13 @@ export function StepEquipeEquipamentos({ values, onChange, work }: RdoWizardStep
     description: `${member.function} · ${member.userEmail}`,
   }));
 
-  const totalProfessionals = values.teams.reduce((sum, team) => sum + (team.quantity || 0), 0);
+  const totalProfessionals = values.professionals.length;
   const equipmentInUse = values.equipments.filter((e) => IN_USE_STATUSES.includes(e.status ?? "IDLE")).length;
   const equipmentIdleOrStopped = values.equipments.length - equipmentInUse;
 
-  function updateTeam<K extends keyof RdoTeamInput>(index: number, field: K, value: RdoTeamInput[K]) {
-    const next = values.teams.map((team, i) => (i === index ? { ...team, [field]: value } : team));
-    onChange("teams", next);
+  function updateProfessional<K extends keyof RdoProfessionalInput>(index: number, field: K, value: RdoProfessionalInput[K]) {
+    const next = values.professionals.map((professional, i) => (i === index ? { ...professional, [field]: value } : professional));
+    onChange("professionals", next);
   }
 
   function updateEquipment<K extends keyof RdoEquipmentInput>(index: number, field: K, value: RdoEquipmentInput[K]) {
@@ -45,10 +47,12 @@ export function StepEquipeEquipamentos({ values, onChange, work }: RdoWizardStep
   function handleMemberChange(index: number, memberId: string) {
     const member = obraTeam.find((m) => m.id === memberId);
     if (!member) return;
-    const next = values.teams.map((team, i) =>
-      i === index ? { ...team, workUserId: member.id, name: member.userName, function: team.function || member.function } : team,
+    const next = values.professionals.map((professional, i) =>
+      i === index
+        ? { ...professional, workUserId: member.id, name: member.userName, function: professional.function || member.function }
+        : professional,
     );
-    onChange("teams", next);
+    onChange("professionals", next);
   }
 
   return (
@@ -64,8 +68,8 @@ export function StepEquipeEquipamentos({ values, onChange, work }: RdoWizardStep
           <p className="mt-1 text-2xl font-bold text-foreground">{totalProfessionals}</p>
         </div>
         <div className="rounded-xl border border-border bg-background p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Equipes Registradas</p>
-          <p className="mt-1 text-2xl font-bold text-foreground">{values.teams.length}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Registros de Equipe</p>
+          <p className="mt-1 text-2xl font-bold text-foreground">{totalProfessionals}</p>
         </div>
         <div className="rounded-xl border border-border bg-background p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Equipamentos (uso / ocioso)</p>
@@ -89,56 +93,63 @@ export function StepEquipeEquipamentos({ values, onChange, work }: RdoWizardStep
           />
         )}
 
-        {values.teams.length === 0 ? (
-          <EmptyState icon={Users} title="Nenhuma equipe registrada" description="Adicione as equipes mobilizadas no dia." />
+        {values.professionals.length === 0 ? (
+          <EmptyState icon={Users} title="Nenhum profissional registrado" description="Adicione os profissionais mobilizados no dia." />
         ) : (
           <div className="flex flex-col gap-3">
-            {values.teams.map((team, index) => (
+            {values.professionals.map((professional, index) => (
               <div key={index} className="rounded-xl border border-border bg-surface p-4">
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-foreground">Equipe {index + 1}</span>
+                  <span className="text-sm font-semibold text-foreground">Profissional {index + 1}</span>
                   <button
                     type="button"
-                    onClick={() => onChange("teams", values.teams.filter((_, i) => i !== index))}
-                    aria-label={`Remover equipe ${index + 1}`}
+                    onClick={() => onChange("professionals", values.professionals.filter((_, i) => i !== index))}
+                    aria-label={`Remover profissional ${index + 1}`}
                     className="focus-ring rounded p-1.5 text-muted-foreground hover:bg-danger-50 hover:text-danger-600"
                   >
                     <Trash2 className="size-4" aria-hidden="true" />
                   </button>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="lg:col-span-2">
+                    <SearchSelect
+                      label="Profissional"
+                      placeholder="Selecione na equipe da obra..."
+                      searchPlaceholder="Buscar por nome, e-mail ou função..."
+                      options={memberOptions}
+                      value={professional.workUserId ?? ""}
+                      onChange={(memberId) => handleMemberChange(index, memberId)}
+                    />
+                  </div>
                   <SearchSelect
-                    label="Profissional / equipe da obra"
-                    placeholder="Selecione na equipe da obra..."
-                    searchPlaceholder="Buscar por nome ou e-mail..."
-                    options={memberOptions}
-                    value={team.workUserId ?? ""}
-                    onChange={(memberId) => handleMemberChange(index, memberId)}
-                  />
-                  <SearchSelect
-                    label="Função no RDO"
+                    label="Função"
                     placeholder="Selecione a função..."
                     searchPlaceholder="Buscar função..."
                     options={WORK_FUNCTION_OPTIONS}
-                    value={team.function}
-                    onChange={(fn) => updateTeam(index, "function", fn)}
+                    value={professional.function}
+                    onChange={(fn) => updateProfessional(index, "function", fn)}
                   />
                   <Input
-                    label="Quantidade"
-                    type="number"
-                    min={1}
-                    value={team.quantity}
-                    onChange={(e) => updateTeam(index, "quantity", Number(e.target.value))}
+                    label="Horário de início"
+                    placeholder="07:00"
+                    inputMode="numeric"
+                    value={professional.startTime ?? ""}
+                    onChange={(e) => updateProfessional(index, "startTime", formatTimeInput(e.target.value))}
                   />
-                  <Input label="Início" placeholder="07:00" value={team.startTime ?? ""} onChange={(e) => updateTeam(index, "startTime", e.target.value)} />
-                  <Input label="Fim" placeholder="16:00" value={team.endTime ?? ""} onChange={(e) => updateTeam(index, "endTime", e.target.value)} />
-                  <Input label="Empresa" value={team.company ?? ""} onChange={(e) => updateTeam(index, "company", e.target.value)} />
+                  <Input
+                    label="Horário de fim"
+                    placeholder="16:00"
+                    inputMode="numeric"
+                    value={professional.endTime ?? ""}
+                    onChange={(e) => updateProfessional(index, "endTime", formatTimeInput(e.target.value))}
+                  />
                   <Textarea
                     label="Observações"
                     placeholder="Opcional"
-                    value={team.notes ?? ""}
-                    onChange={(e) => updateTeam(index, "notes", e.target.value)}
+                    value={professional.notes ?? ""}
+                    onChange={(e) => updateProfessional(index, "notes", e.target.value)}
                     className="sm:col-span-2 lg:col-span-3"
+                    rows={2}
                   />
                 </div>
               </div>
@@ -146,9 +157,15 @@ export function StepEquipeEquipamentos({ values, onChange, work }: RdoWizardStep
           </div>
         )}
 
-        <Button type="button" variant="outline" size="sm" onClick={() => onChange("teams", [...values.teams, emptyTeam()])} className="self-start">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange("professionals", [...values.professionals, emptyProfessional()])}
+          className="self-start"
+        >
           <Plus className="size-4" aria-hidden="true" />
-          Adicionar Equipe
+          Adicionar Profissional
         </Button>
       </section>
 
@@ -176,23 +193,34 @@ export function StepEquipeEquipamentos({ values, onChange, work }: RdoWizardStep
                   </button>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <Input label="Nome" value={equipment.name} onChange={(e) => updateEquipment(index, "name", e.target.value)} />
-                  <Input label="Identificação" placeholder="EX-104" value={equipment.identifier ?? ""} onChange={(e) => updateEquipment(index, "identifier", e.target.value)} />
+                  <SearchSelect
+                    label="Nome do equipamento"
+                    placeholder="Selecione o equipamento..."
+                    searchPlaceholder="Buscar equipamento..."
+                    options={RDO_EQUIPMENT_NAME_OPTIONS}
+                    value={equipment.name}
+                    onChange={(name) => updateEquipment(index, "name", name)}
+                  />
                   <Input
-                    label="Quantidade"
-                    type="number"
-                    min={1}
-                    value={equipment.quantity ?? 1}
-                    onChange={(e) => updateEquipment(index, "quantity", Number(e.target.value))}
+                    label="Identificação / patrimônio"
+                    placeholder="EX-104"
+                    value={equipment.identifier ?? ""}
+                    onChange={(e) => updateEquipment(index, "identifier", e.target.value)}
                   />
                   <Input label="Operador" value={equipment.operator ?? ""} onChange={(e) => updateEquipment(index, "operator", e.target.value)} />
                   <Input
-                    label="Horas"
-                    type="number"
-                    min={0}
-                    step="0.5"
-                    value={equipment.hours ?? 0}
-                    onChange={(e) => updateEquipment(index, "hours", Number(e.target.value))}
+                    label="Horário de início"
+                    placeholder="07:00"
+                    inputMode="numeric"
+                    value={equipment.startTime ?? ""}
+                    onChange={(e) => updateEquipment(index, "startTime", formatTimeInput(e.target.value))}
+                  />
+                  <Input
+                    label="Horário de fim"
+                    placeholder="16:00"
+                    inputMode="numeric"
+                    value={equipment.endTime ?? ""}
+                    onChange={(e) => updateEquipment(index, "endTime", formatTimeInput(e.target.value))}
                   />
                   <Select
                     label="Status"
@@ -206,6 +234,7 @@ export function StepEquipeEquipamentos({ values, onChange, work }: RdoWizardStep
                     value={equipment.notes ?? ""}
                     onChange={(e) => updateEquipment(index, "notes", e.target.value)}
                     className="sm:col-span-2 lg:col-span-3"
+                    rows={2}
                   />
                 </div>
               </div>

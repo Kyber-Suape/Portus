@@ -18,7 +18,7 @@ export function StepRevisaoFinal({ rdo, values, onBack, onSubmit, isSubmitting }
   const checklist = [
     { label: "Dados Gerais", ok: Boolean(values.siteEngineerName && values.date) },
     { label: "Atividades Realizadas", ok: values.activities.length > 0 },
-    { label: "Efetivo da Equipe", ok: values.teams.length > 0 },
+    { label: "Efetivo da Equipe", ok: values.professionals.length > 0 },
     { label: "Condições Climáticas", ok: Boolean(values.weather.groundStatus) },
     { label: "Evidências Fotográficas", ok: rdo.evidences.length > 0 },
   ];

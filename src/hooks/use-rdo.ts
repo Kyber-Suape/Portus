@@ -5,12 +5,15 @@ import { rdosService } from "@/services/rdos.service";
 import { ApiError } from "@/lib/api/client";
 import { useAuth } from "@/hooks/use-auth";
 import type {
+  ApproveStepRequest,
   CreateCommentRequest,
   CreateRdoRequest,
   Rdo,
   RdoAuthorSummary,
+  RejectStepRequest,
   ReopenRdoRequest,
-  ReviewActionRequest,
+  RequestChangesStepRequest,
+  SignStepRequest,
   UpdateRdoRequest,
 } from "@/types/rdo";
 
@@ -79,31 +82,31 @@ export function useRdo(id: string | null) {
     return result;
   }, [actor]);
 
-  const externalApprove = useCallback(async (rdoId: string, payload?: ReviewActionRequest) => {
-    const result = await rdosService.externalApprove(rdoId, payload, actor);
+  const approveStep = useCallback(async (rdoId: string, payload?: ApproveStepRequest) => {
+    const result = await rdosService.approveStep(rdoId, payload, actor);
     setRdo(result);
     return result;
   }, [actor]);
 
-  const externalReject = useCallback(async (rdoId: string, payload: ReviewActionRequest) => {
-    const result = await rdosService.externalReject(rdoId, payload, actor);
+  const rejectStep = useCallback(async (rdoId: string, payload: RejectStepRequest) => {
+    const result = await rdosService.rejectStep(rdoId, payload, actor);
     setRdo(result);
     return result;
   }, [actor]);
 
-  const suapeApprove = useCallback(async (rdoId: string, payload?: ReviewActionRequest) => {
-    const result = await rdosService.suapeApprove(rdoId, payload, actor);
+  const requestChangesStep = useCallback(async (rdoId: string, payload: RequestChangesStepRequest) => {
+    const result = await rdosService.requestChangesStep(rdoId, payload, actor);
     setRdo(result);
     return result;
   }, [actor]);
 
-  const suapeReject = useCallback(async (rdoId: string, payload: ReviewActionRequest) => {
-    const result = await rdosService.suapeReject(rdoId, payload, actor);
+  const signStep = useCallback(async (rdoId: string, payload: SignStepRequest) => {
+    const result = await rdosService.signStep(rdoId, payload, actor);
     setRdo(result);
     return result;
   }, [actor]);
 
-  const reopen = useCallback(async (rdoId: string, payload?: ReopenRdoRequest) => {
+  const reopen = useCallback(async (rdoId: string, payload: ReopenRdoRequest) => {
     const result = await rdosService.reopen(rdoId, payload, actor);
     setRdo(result);
     return result;
@@ -124,10 +127,10 @@ export function useRdo(id: string | null) {
     update,
     remove,
     submit,
-    externalApprove,
-    externalReject,
-    suapeApprove,
-    suapeReject,
+    approveStep,
+    rejectStep,
+    requestChangesStep,
+    signStep,
     reopen,
     addComment,
     refetch: fetchRdo,

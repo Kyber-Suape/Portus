@@ -40,7 +40,7 @@ function buildSectionPayload(step: number, values: RdoWizardValues): UpdateRdoRe
     case 2:
       return { activities: values.activities };
     case 3:
-      return { teams: values.teams, equipments: values.equipments };
+      return { professionals: values.professionals, equipments: values.equipments };
     case 4:
       return { weather: values.weather, occurrences: values.occurrences, nonConformities: values.nonConformities };
     default:

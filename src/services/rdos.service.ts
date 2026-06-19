@@ -1,30 +1,37 @@
+import { isRdoEditable, isRdoReopenable } from "@/constants/rdo";
+import { RDO_APPROVAL_CHAIN } from "@/constants/rdo-approval";
+import { RDO_SIGNATURE_CHAIN, generateMockSignatureHash } from "@/constants/rdo-signature";
 import { delay } from "@/lib/mock-delay";
 import { RDOS_SEED } from "@/mocks/rdos.mock";
 import { worksService } from "@/services/works.service";
 import type { PaginatedData } from "@/types/api";
 import type {
+  ApproveStepRequest,
   CreateCommentRequest,
   CreateRdoRequest,
   EvidenceUploadMeta,
   ListRdosQuery,
   Rdo,
+  RdoApprovalHistoryItem,
+  RdoApprovalStep,
   RdoAuthorSummary,
   RdoComment,
   RdoEvidence,
-  RdoStatusHistoryEntry,
+  RdoSignatureHistoryItem,
+  RdoSignatureStep,
   RdoStatus,
+  RdoStatusHistoryEntry,
   RdoSummary,
+  RejectStepRequest,
   ReopenRdoRequest,
-  ReviewActionRequest,
+  RequestChangesStepRequest,
+  SignStepRequest,
   UpdateEvidenceRequest,
   UpdateRdoRequest,
 } from "@/types/rdo";
 
 /** Front-only: nenhuma chamada à API. Estado mutável em memória, reimplementa as regras de transição de status que existiam no backend. */
 let rdos: Rdo[] = RDOS_SEED.map((rdo) => ({ ...rdo }));
-
-const EDITABLE_STATUSES: RdoStatus[] = ["DRAFT", "REJECTED_BY_EXTERNAL", "REJECTED_BY_SUAPE", "REOPENED"];
-const REOPENABLE_STATUSES: RdoStatus[] = ["APPROVED", "REJECTED_BY_SUAPE", "REJECTED_BY_EXTERNAL"];
 
 const FALLBACK_ACTOR: RdoAuthorSummary = { id: "system", name: "Sistema", role: "SYSTEM_ADMIN" };
 
@@ -39,7 +46,7 @@ function findRdoOrThrow(id: string): Rdo {
 }
 
 function assertEditable(rdo: Rdo) {
-  if (!EDITABLE_STATUSES.includes(rdo.status)) {
+  if (!isRdoEditable(rdo.status)) {
     throw new Error("Este RDO não pode ser editado no status atual.");
   }
 }
@@ -48,17 +55,27 @@ function nextNumber(): number {
   return rdos.reduce((max, rdo) => Math.max(max, rdo.number), 0) + 1;
 }
 
-function pushHistory(rdo: Rdo, from: RdoStatus | null, to: RdoStatus, changedBy: RdoAuthorSummary, reason?: string): Rdo {
+function pushStatusHistory(rdo: Rdo, to: RdoStatus, changedBy: RdoAuthorSummary, reason?: string): Rdo {
   const entry: RdoStatusHistoryEntry = {
     id: crypto.randomUUID(),
     rdoId: rdo.id,
-    fromStatus: from,
+    fromStatus: rdo.status,
     toStatus: to,
     reason,
     changedBy,
     createdAt: nowIso(),
   };
   return { ...rdo, status: to, statusHistory: [...rdo.statusHistory, entry], updatedAt: nowIso() };
+}
+
+function pushApprovalHistory(rdo: Rdo, entry: Omit<RdoApprovalHistoryItem, "id" | "rdoId" | "createdAt">): Rdo {
+  const item: RdoApprovalHistoryItem = { id: crypto.randomUUID(), rdoId: rdo.id, createdAt: nowIso(), ...entry };
+  return { ...rdo, approvalHistory: [...rdo.approvalHistory, item] };
+}
+
+function pushSignatureHistory(rdo: Rdo, entry: Omit<RdoSignatureHistoryItem, "id" | "rdoId" | "createdAt">): Rdo {
+  const item: RdoSignatureHistoryItem = { id: crypto.randomUUID(), rdoId: rdo.id, createdAt: nowIso(), ...entry };
+  return { ...rdo, signatureHistory: [...rdo.signatureHistory, item] };
 }
 
 function save(updated: Rdo): Rdo {
@@ -68,6 +85,32 @@ function save(updated: Rdo): Rdo {
 
 function buildEvidenceObjectUrl(file: File): string {
   return URL.createObjectURL(file);
+}
+
+/** Reinicia a cadeia de aprovação do zero (1º aprovador como `CURRENT`) — usado tanto no
+ * primeiro envio quanto no reenvio após ajustes/reprovação, a opção mais simples e auditável
+ * para a demo (ver seção 1 da especificação do fluxo). */
+function freshApprovalSteps(): RdoApprovalStep[] {
+  return RDO_APPROVAL_CHAIN.map((def) => ({
+    id: crypto.randomUUID(),
+    rdoId: "",
+    order: def.order,
+    reviewerRole: def.reviewerRole,
+    reviewerLabel: def.reviewerLabel,
+    status: def.order === 1 ? "CURRENT" : "PENDING",
+  }));
+}
+
+function findCurrentApprovalStep(rdo: Rdo) {
+  const step = rdo.approvalSteps.find((s) => s.status === "CURRENT");
+  if (!step) throw new Error("Não há etapa de aprovação em análise neste RDO.");
+  return step;
+}
+
+function findCurrentSignatureStep(rdo: Rdo) {
+  const step = rdo.signatureSteps.find((s) => s.status === "CURRENT");
+  if (!step) throw new Error("Não há assinatura disponível neste RDO no momento.");
+  return step;
 }
 
 export const rdosService = {
@@ -140,13 +183,16 @@ export const rdosService = {
       status: "DRAFT",
       submittedAt: null,
       activities: [],
-      teams: [],
+      professionals: [],
       equipments: [],
       weather: null,
       occurrences: [],
       nonConformities: [],
       evidences: [],
-      reviews: [],
+      approvalSteps: [],
+      approvalHistory: [],
+      signatureSteps: [],
+      signatureHistory: [],
       statusHistory: [],
       comments: [],
       createdAt: nowIso(),
@@ -187,31 +233,29 @@ export const rdosService = {
             updatedAt: nowIso(),
           }))
         : existing.activities,
-      teams: payload.teams
-        ? payload.teams.map((t) => ({
+      professionals: payload.professionals
+        ? payload.professionals.map((p) => ({
             id: crypto.randomUUID(),
             rdoId: id,
-            workUserId: t.workUserId,
-            name: t.name,
-            function: t.function,
-            quantity: t.quantity,
-            startTime: t.startTime,
-            endTime: t.endTime,
-            company: t.company,
-            notes: t.notes,
+            workUserId: p.workUserId,
+            name: p.name,
+            function: p.function,
+            startTime: p.startTime,
+            endTime: p.endTime,
+            notes: p.notes,
             createdAt: nowIso(),
             updatedAt: nowIso(),
           }))
-        : existing.teams,
+        : existing.professionals,
       equipments: payload.equipments
         ? payload.equipments.map((e) => ({
             id: crypto.randomUUID(),
             rdoId: id,
             name: e.name,
             identifier: e.identifier,
-            quantity: e.quantity ?? 1,
             operator: e.operator,
-            hours: e.hours,
+            startTime: e.startTime,
+            endTime: e.endTime,
             status: e.status ?? "IDLE",
             notes: e.notes,
             createdAt: nowIso(),
@@ -272,95 +316,167 @@ export const rdosService = {
     if (rdo.status !== "DRAFT") {
       throw new Error("Só é possível remover RDOs em rascunho.");
     }
-    save(pushHistory(rdo, rdo.status, "CANCELED", FALLBACK_ACTOR));
+    save(pushStatusHistory(rdo, "CANCELED", FALLBACK_ACTOR));
   },
 
+  /** Envia para revisão (1º envio) ou reenvia após ajustes/reprovação — a cadeia de aprovação
+   * sempre recomeça do 1º aprovador, a abordagem mais simples e auditável para a demo. */
   async submit(id: string, actor?: RdoAuthorSummary | null): Promise<Rdo> {
     await delay();
     const rdo = findRdoOrThrow(id);
-    if (!EDITABLE_STATUSES.includes(rdo.status)) {
+    if (!isRdoEditable(rdo.status)) {
       throw new Error("Este RDO não pode ser enviado para revisão no status atual.");
     }
     const by = actor ?? FALLBACK_ACTOR;
-    let next = pushHistory(rdo, rdo.status, "SENT_TO_REVIEW", by);
-    next = pushHistory(next, "SENT_TO_REVIEW", "UNDER_EXTERNAL_REVIEW", by);
-    next = { ...next, submittedAt: nowIso() };
+    const isResend = rdo.status !== "DRAFT";
+
+    let next = pushStatusHistory(rdo, "SENT_TO_REVIEW", by);
+    next = pushStatusHistory(next, "UNDER_REVIEW", by);
+    next = pushApprovalHistory(next, { action: isResend ? "RESENT" : "SUBMITTED", actor: by });
+    next = {
+      ...next,
+      approvalSteps: freshApprovalSteps().map((step) => ({ ...step, rdoId: id })),
+      submittedAt: nowIso(),
+    };
     return save(next);
   },
 
-  async externalApprove(id: string, payload: ReviewActionRequest = {}, actor?: RdoAuthorSummary | null): Promise<Rdo> {
+  async approveStep(id: string, payload: ApproveStepRequest = {}, actor?: RdoAuthorSummary | null): Promise<Rdo> {
     await delay();
     const rdo = findRdoOrThrow(id);
-    if (rdo.status !== "UNDER_EXTERNAL_REVIEW") throw new Error("Este RDO não está em revisão externa.");
+    if (rdo.status !== "UNDER_REVIEW") throw new Error("Este RDO não está em análise de aprovação.");
     const by = actor ?? FALLBACK_ACTOR;
+    const step = findCurrentApprovalStep(rdo);
+    const isLastStep = step.order === RDO_APPROVAL_CHAIN.length;
+
     let next: Rdo = {
       ...rdo,
-      reviews: [
-        ...rdo.reviews,
-        { id: crypto.randomUUID(), rdoId: id, stage: "EXTERNAL", decision: "APPROVED", comments: payload.comments, reviewer: by, createdAt: nowIso() },
-      ],
+      approvalSteps: rdo.approvalSteps.map((s) =>
+        s.id === step.id ? { ...s, status: "APPROVED", action: "APPROVED", comment: payload.comment, actedBy: by, actedAt: nowIso() } : s,
+      ),
     };
-    next = pushHistory(next, rdo.status, "EXTERNAL_APPROVED", by, payload.comments);
-    next = pushHistory(next, "EXTERNAL_APPROVED", "UNDER_SUAPE_REVIEW", by);
+    next = pushApprovalHistory(next, { stepOrder: step.order, action: "APPROVED", comment: payload.comment, actor: by });
+
+    const transientStatus = `APPROVED_BY_REVIEWER_${step.order}` as RdoStatus;
+    next = pushStatusHistory(next, transientStatus, by);
+
+    if (isLastStep) {
+      next = pushStatusHistory(next, "FINAL_APPROVED", by);
+      next = pushStatusHistory(next, "LOCKED", by);
+      next = pushApprovalHistory(next, { action: "LOCKED", actor: by });
+      const firstSigner = RDO_SIGNATURE_CHAIN[0];
+      next = {
+        ...next,
+        signatureSteps: RDO_SIGNATURE_CHAIN.map((def) => ({
+          id: crypto.randomUUID(),
+          rdoId: id,
+          order: def.order,
+          signerRole: def.signerRole,
+          signerLabel: def.signerLabel,
+          status: def.order === 1 ? "CURRENT" : "PENDING",
+        })),
+      };
+      next = pushSignatureHistory(next, { signerRole: firstSigner.signerRole, signerLabel: firstSigner.signerLabel, action: "SIGNATURE_REQUESTED", actor: by });
+      next = pushStatusHistory(next, "SIGNATURE_PENDING", by);
+    } else {
+      next = {
+        ...next,
+        approvalSteps: next.approvalSteps.map((s) => (s.order === step.order + 1 ? { ...s, status: "CURRENT" } : s)),
+      };
+      next = pushStatusHistory(next, "UNDER_REVIEW", by);
+    }
+
     return save(next);
   },
 
-  async externalReject(id: string, payload: ReviewActionRequest, actor?: RdoAuthorSummary | null): Promise<Rdo> {
+  async rejectStep(id: string, payload: RejectStepRequest, actor?: RdoAuthorSummary | null): Promise<Rdo> {
     await delay();
     const rdo = findRdoOrThrow(id);
-    if (rdo.status !== "UNDER_EXTERNAL_REVIEW") throw new Error("Este RDO não está em revisão externa.");
+    if (rdo.status !== "UNDER_REVIEW") throw new Error("Este RDO não está em análise de aprovação.");
     const by = actor ?? FALLBACK_ACTOR;
+    const step = findCurrentApprovalStep(rdo);
+
     let next: Rdo = {
       ...rdo,
-      reviews: [
-        ...rdo.reviews,
-        { id: crypto.randomUUID(), rdoId: id, stage: "EXTERNAL", decision: "REJECTED", comments: payload.comments, reviewer: by, createdAt: nowIso() },
-      ],
+      approvalSteps: rdo.approvalSteps.map((s) =>
+        s.id === step.id ? { ...s, status: "REJECTED", action: "REJECTED", comment: payload.comment, actedBy: by, actedAt: nowIso() } : s,
+      ),
     };
-    next = pushHistory(next, rdo.status, "REJECTED_BY_EXTERNAL", by, payload.comments);
+    next = pushApprovalHistory(next, { stepOrder: step.order, action: "REJECTED", comment: payload.comment, actor: by });
+    next = pushStatusHistory(next, "REJECTED", by, payload.comment);
     return save(next);
   },
 
-  async suapeApprove(id: string, payload: ReviewActionRequest = {}, actor?: RdoAuthorSummary | null): Promise<Rdo> {
+  async requestChangesStep(id: string, payload: RequestChangesStepRequest, actor?: RdoAuthorSummary | null): Promise<Rdo> {
     await delay();
     const rdo = findRdoOrThrow(id);
-    if (rdo.status !== "UNDER_SUAPE_REVIEW") throw new Error("Este RDO não está em revisão SUAPE.");
+    if (rdo.status !== "UNDER_REVIEW") throw new Error("Este RDO não está em análise de aprovação.");
     const by = actor ?? FALLBACK_ACTOR;
+    const step = findCurrentApprovalStep(rdo);
+
     let next: Rdo = {
       ...rdo,
-      reviews: [
-        ...rdo.reviews,
-        { id: crypto.randomUUID(), rdoId: id, stage: "SUAPE", decision: "APPROVED", comments: payload.comments, reviewer: by, createdAt: nowIso() },
-      ],
+      approvalSteps: rdo.approvalSteps.map((s) =>
+        s.id === step.id
+          ? { ...s, status: "CHANGES_REQUESTED", action: "CHANGES_REQUESTED", requestedChanges: payload.requestedChanges, actedBy: by, actedAt: nowIso() }
+          : s,
+      ),
     };
-    next = pushHistory(next, rdo.status, "APPROVED", by, payload.comments);
+    next = pushApprovalHistory(next, { stepOrder: step.order, action: "CHANGES_REQUESTED", requestedChanges: payload.requestedChanges, actor: by });
+    next = pushStatusHistory(next, "CHANGES_REQUESTED", by, payload.requestedChanges);
     return save(next);
   },
 
-  async suapeReject(id: string, payload: ReviewActionRequest, actor?: RdoAuthorSummary | null): Promise<Rdo> {
+  async signStep(id: string, payload: SignStepRequest, actor?: RdoAuthorSummary | null): Promise<Rdo> {
     await delay();
     const rdo = findRdoOrThrow(id);
-    if (rdo.status !== "UNDER_SUAPE_REVIEW") throw new Error("Este RDO não está em revisão SUAPE.");
+    if (rdo.status !== "SIGNATURE_PENDING" && rdo.status !== "PARTIALLY_SIGNED") {
+      throw new Error("Este RDO não está com assinaturas em aberto.");
+    }
     const by = actor ?? FALLBACK_ACTOR;
+    const step = findCurrentSignatureStep(rdo);
+    const isLastStep = step.order === RDO_SIGNATURE_CHAIN.length;
+    const hash = generateMockSignatureHash(rdo.number);
+
     let next: Rdo = {
       ...rdo,
-      reviews: [
-        ...rdo.reviews,
-        { id: crypto.randomUUID(), rdoId: id, stage: "SUAPE", decision: "REJECTED", comments: payload.comments, reviewer: by, createdAt: nowIso() },
-      ],
+      signatureSteps: rdo.signatureSteps.map((s) =>
+        s.id === step.id ? { ...s, status: "SIGNED", signedBy: by, signedAt: nowIso(), method: payload.method, signatureHash: hash } : s,
+      ),
     };
-    next = pushHistory(next, rdo.status, "REJECTED_BY_SUAPE", by, payload.comments);
+    next = pushSignatureHistory(next, { signerRole: step.signerRole, signerLabel: step.signerLabel, action: "SIGNED", method: payload.method, actor: by });
+
+    if (isLastStep) {
+      next = pushStatusHistory(next, "SIGNED", by);
+      next = pushStatusHistory(next, "COMPLETED", by);
+    } else {
+      const nextSigner = RDO_SIGNATURE_CHAIN[step.order];
+      next = {
+        ...next,
+        signatureSteps: next.signatureSteps.map((s) => (s.order === step.order + 1 ? { ...s, status: "CURRENT" } : s)),
+      };
+      next = pushSignatureHistory(next, { signerRole: nextSigner.signerRole, signerLabel: nextSigner.signerLabel, action: "SIGNATURE_REQUESTED", actor: by });
+      next = pushStatusHistory(next, "PARTIALLY_SIGNED", by);
+    }
+
     return save(next);
   },
 
-  async reopen(id: string, payload: ReopenRdoRequest = {}, actor?: RdoAuthorSummary | null): Promise<Rdo> {
+  async reopen(id: string, payload: ReopenRdoRequest, actor?: RdoAuthorSummary | null): Promise<Rdo> {
     await delay();
     const rdo = findRdoOrThrow(id);
-    if (!REOPENABLE_STATUSES.includes(rdo.status)) {
+    if (!isRdoReopenable(rdo.status)) {
       throw new Error("Este RDO não pode ser reaberto no status atual.");
     }
     const by = actor ?? FALLBACK_ACTOR;
-    return save(pushHistory(rdo, rdo.status, "REOPENED", by, payload.reason));
+    const hadSignatures = rdo.signatureSteps.some((s) => s.status === "SIGNED");
+
+    let next = pushStatusHistory(rdo, "REOPENED", by, payload.reason);
+    next = pushApprovalHistory(next, { action: "REOPENED", comment: payload.reason, actor: by });
+    if (hadSignatures) {
+      next = { ...next, signatureSteps: [] };
+    }
+    return save(next);
   },
 
   async addComment(id: string, payload: CreateCommentRequest, actor?: RdoAuthorSummary | null): Promise<RdoComment> {
@@ -398,6 +514,8 @@ export const rdosService = {
       longitude: meta.longitude,
       accuracyMeters: meta.accuracyMeters,
       altitudeMeters: meta.altitudeMeters,
+      location: meta.location,
+      geoStatus: meta.geoStatus ?? "UNAVAILABLE",
       capturedAt: meta.capturedAt ?? nowIso(),
       uploadedBy: by,
       uploadStatus: "UPLOADED",

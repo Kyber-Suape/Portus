@@ -43,6 +43,21 @@ export function formatRelativeToNow(value: string | Date): string {
   return rtf.format(Math.round(duration), "year");
 }
 
+/** Formato "14:23 - 22 out 2026", usado nos cards de evidência. */
+export function formatEvidenceTimestamp(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const time = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(date);
+  const day = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+  return `${time} - ${day}`;
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
+
 export function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
   const first = parts[0]?.[0] ?? "";

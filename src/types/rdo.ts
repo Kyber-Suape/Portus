@@ -1,16 +1,29 @@
 import type { UserRole } from "@/types/user";
 
+/**
+ * Estados "de repouso" (persistem até a próxima ação): DRAFT, SENT_TO_REVIEW (só entre o envio
+ * e a entrada na fila do 1º aprovador — ver `rdos.service.ts`), UNDER_REVIEW, CHANGES_REQUESTED,
+ * REJECTED, SIGNATURE_PENDING, PARTIALLY_SIGNED, COMPLETED, REOPENED, CANCELED.
+ * Estados "transitórios" (só aparecem como `toStatus` no histórico, nunca como `rdo.status`
+ * por mais que um instante): APPROVED_BY_REVIEWER_1/2/3, FINAL_APPROVED, LOCKED, SIGNED — cada
+ * um marca um evento específico no histórico antes do RDO assentar no próximo estado de
+ * repouso (mesmo padrão usado para SENT_TO_REVIEW/EXTERNAL_APPROVED no fluxo anterior).
+ */
 export type RdoStatus =
   | "DRAFT"
   | "SENT_TO_REVIEW"
-  | "UNDER_EXTERNAL_REVIEW"
-  | "EXTERNAL_APPROVED"
-  | "REJECTED_BY_EXTERNAL"
-  | "UNDER_SUAPE_REVIEW"
-  | "APPROVED"
-  | "REJECTED_BY_SUAPE"
+  | "UNDER_REVIEW"
+  | "CHANGES_REQUESTED"
+  | "REJECTED"
+  | "APPROVED_BY_REVIEWER_1"
+  | "APPROVED_BY_REVIEWER_2"
+  | "APPROVED_BY_REVIEWER_3"
+  | "FINAL_APPROVED"
+  | "LOCKED"
   | "SIGNATURE_PENDING"
+  | "PARTIALLY_SIGNED"
   | "SIGNED"
+  | "COMPLETED"
   | "REOPENED"
   | "CANCELED";
 
@@ -25,8 +38,22 @@ export type RdoNonConformityStatus = "OPEN" | "IN_ANALYSIS" | "RESOLVED";
 export type RdoEvidenceType = "PHOTO" | "VIDEO" | "FILE";
 export type RdoEvidenceUploadStatus = "PENDING" | "UPLOADING" | "UPLOADED" | "FAILED";
 export type RdoEvidenceValidationStatus = "PENDING" | "VALIDATED" | "REJECTED";
-export type RdoReviewStage = "EXTERNAL" | "SUAPE";
-export type RdoReviewDecision = "APPROVED" | "REJECTED";
+export type RdoEvidenceGeoStatus = "VALIDATED" | "PENDING" | "UNAVAILABLE";
+
+export type RdoApprovalStepStatus = "PENDING" | "CURRENT" | "APPROVED" | "REJECTED" | "CHANGES_REQUESTED" | "BLOCKED";
+export type RdoApprovalAction = "APPROVED" | "REJECTED" | "CHANGES_REQUESTED";
+export type RdoApprovalHistoryAction =
+  | "SUBMITTED"
+  | "APPROVED"
+  | "REJECTED"
+  | "CHANGES_REQUESTED"
+  | "RESENT"
+  | "LOCKED"
+  | "REOPENED";
+
+export type RdoSignatureStepStatus = "PENDING" | "CURRENT" | "SIGNED" | "BLOCKED";
+export type RdoSignatureMethod = "GOV_BR" | "DIGITAL_CERTIFICATE" | "MOCK_SIGNATURE";
+export type RdoSignatureHistoryAction = "SIGNATURE_REQUESTED" | "SIGNED";
 
 export interface RdoAuthorSummary {
   id: string;
@@ -45,16 +72,14 @@ export interface RdoActivity {
   updatedAt: string;
 }
 
-export interface RdoTeam {
+export interface RdoProfessional {
   id: string;
   rdoId: string;
   workUserId?: string | null;
   name: string;
   function: string;
-  quantity: number;
   startTime?: string | null;
   endTime?: string | null;
-  company?: string | null;
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -65,9 +90,9 @@ export interface RdoEquipment {
   rdoId: string;
   name: string;
   identifier?: string | null;
-  quantity: number;
   operator?: string | null;
-  hours?: number | null;
+  startTime?: string | null;
+  endTime?: string | null;
   status: RdoEquipmentStatus;
   notes?: string | null;
   createdAt: string;
@@ -113,6 +138,13 @@ export interface RdoNonConformity {
   updatedAt: string;
 }
 
+export interface RdoEvidenceLocation {
+  country?: string | null;
+  state?: string | null;
+  city?: string | null;
+  neighborhood?: string | null;
+}
+
 export interface RdoEvidence {
   id: string;
   rdoId: string;
@@ -125,6 +157,8 @@ export interface RdoEvidence {
   longitude?: number | null;
   accuracyMeters?: number | null;
   altitudeMeters?: number | null;
+  location?: RdoEvidenceLocation | null;
+  geoStatus: RdoEvidenceGeoStatus;
   capturedAt?: string | null;
   uploadedBy: RdoAuthorSummary;
   uploadStatus: RdoEvidenceUploadStatus;
@@ -135,13 +169,58 @@ export interface RdoEvidence {
   url: string;
 }
 
-export interface RdoReview {
+/** Uma das 3 etapas fixas da cadeia de aprovadores. `reviewerRole` define quem está habilitado a
+ * agir (ver `isCurrentApprover` em `constants/rdo-approval.ts`) — não é vinculado a uma pessoa
+ * específica, pelo mesmo motivo que o RDO não amarra revisor a usuário: o cargo/papel é quem
+ * ocupa a fila, não o indivíduo. */
+export interface RdoApprovalStep {
   id: string;
   rdoId: string;
-  stage: RdoReviewStage;
-  decision: RdoReviewDecision;
-  comments?: string | null;
-  reviewer: RdoAuthorSummary;
+  order: number;
+  reviewerRole: UserRole;
+  reviewerLabel: string;
+  status: RdoApprovalStepStatus;
+  action?: RdoApprovalAction | null;
+  comment?: string | null;
+  requestedChanges?: string | null;
+  actedBy?: RdoAuthorSummary | null;
+  actedAt?: string | null;
+}
+
+export interface RdoApprovalHistoryItem {
+  id: string;
+  rdoId: string;
+  stepOrder?: number | null;
+  action: RdoApprovalHistoryAction;
+  comment?: string | null;
+  requestedChanges?: string | null;
+  actor: RdoAuthorSummary;
+  createdAt: string;
+}
+
+/** Uma das 4 etapas fixas da cadeia de assinatura, liberada na ordem após `FINAL_APPROVED`. */
+export interface RdoSignatureStep {
+  id: string;
+  rdoId: string;
+  order: number;
+  signerRole: UserRole;
+  signerLabel: string;
+  status: RdoSignatureStepStatus;
+  signedBy?: RdoAuthorSummary | null;
+  signedAt?: string | null;
+  method?: RdoSignatureMethod | null;
+  /** Protocolo mockado, ex.: "SIG-RDO-2026-0001-A8F92C" — nunca uma assinatura eletrônica real. */
+  signatureHash?: string | null;
+}
+
+export interface RdoSignatureHistoryItem {
+  id: string;
+  rdoId: string;
+  signerRole: UserRole;
+  signerLabel: string;
+  action: RdoSignatureHistoryAction;
+  method?: RdoSignatureMethod | null;
+  actor: RdoAuthorSummary;
   createdAt: string;
 }
 
@@ -182,13 +261,16 @@ export interface Rdo {
   status: RdoStatus;
   submittedAt?: string | null;
   activities: RdoActivity[];
-  teams: RdoTeam[];
+  professionals: RdoProfessional[];
   equipments: RdoEquipment[];
   weather: RdoWeather | null;
   occurrences: RdoOccurrence[];
   nonConformities: RdoNonConformity[];
   evidences: RdoEvidence[];
-  reviews: RdoReview[];
+  approvalSteps: RdoApprovalStep[];
+  approvalHistory: RdoApprovalHistoryItem[];
+  signatureSteps: RdoSignatureStep[];
+  signatureHistory: RdoSignatureHistoryItem[];
   statusHistory: RdoStatusHistoryEntry[];
   comments: RdoComment[];
   createdAt: string;
@@ -229,23 +311,21 @@ export interface RdoActivityInput {
   aiSuggestionUsed?: boolean;
 }
 
-export interface RdoTeamInput {
+export interface RdoProfessionalInput {
   workUserId?: string;
   name: string;
   function: string;
-  quantity: number;
   startTime?: string;
   endTime?: string;
-  company?: string;
   notes?: string;
 }
 
 export interface RdoEquipmentInput {
   name: string;
   identifier?: string;
-  quantity?: number;
   operator?: string;
-  hours?: number;
+  startTime?: string;
+  endTime?: string;
   status?: RdoEquipmentStatus;
   notes?: string;
 }
@@ -284,7 +364,7 @@ export interface UpdateRdoRequest {
   foremanName?: string;
   notes?: string;
   activities?: RdoActivityInput[];
-  teams?: RdoTeamInput[];
+  professionals?: RdoProfessionalInput[];
   equipments?: RdoEquipmentInput[];
   weather?: RdoWeatherInput;
   occurrences?: RdoOccurrenceInput[];
@@ -299,12 +379,24 @@ export interface ListRdosQuery {
   workId?: string;
 }
 
-export interface ReviewActionRequest {
-  comments?: string;
+export interface ApproveStepRequest {
+  comment?: string;
+}
+
+export interface RejectStepRequest {
+  comment: string;
+}
+
+export interface RequestChangesStepRequest {
+  requestedChanges: string;
+}
+
+export interface SignStepRequest {
+  method: RdoSignatureMethod;
 }
 
 export interface ReopenRdoRequest {
-  reason?: string;
+  reason: string;
 }
 
 export interface CreateCommentRequest {
@@ -318,6 +410,8 @@ export interface EvidenceUploadMeta {
   longitude?: number;
   accuracyMeters?: number;
   altitudeMeters?: number;
+  location?: RdoEvidenceLocation;
+  geoStatus?: RdoEvidenceGeoStatus;
   capturedAt?: string;
 }
 

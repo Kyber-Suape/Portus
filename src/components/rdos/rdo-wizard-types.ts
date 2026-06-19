@@ -5,8 +5,8 @@ import type {
   RdoEquipmentInput,
   RdoNonConformityInput,
   RdoOccurrenceInput,
+  RdoProfessionalInput,
   RdoShift,
-  RdoTeamInput,
   RdoWeatherInput,
 } from "@/types/rdo";
 
@@ -18,7 +18,7 @@ export interface RdoWizardValues {
   foremanName: string;
   notes: string;
   activities: RdoActivityInput[];
-  teams: RdoTeamInput[];
+  professionals: RdoProfessionalInput[];
   equipments: RdoEquipmentInput[];
   weather: RdoWeatherInput;
   occurrences: RdoOccurrenceInput[];
@@ -47,21 +47,22 @@ export function toWizardValues(rdo: Rdo): RdoWizardValues {
       status: a.status,
       aiSuggestionUsed: a.aiSuggestionUsed,
     })),
-    teams: rdo.teams.map((t) => ({
-      name: t.name,
-      function: t.function,
-      quantity: t.quantity,
-      startTime: t.startTime ?? undefined,
-      endTime: t.endTime ?? undefined,
-      company: t.company ?? undefined,
+    professionals: rdo.professionals.map((p) => ({
+      workUserId: p.workUserId ?? undefined,
+      name: p.name,
+      function: p.function,
+      startTime: p.startTime ?? undefined,
+      endTime: p.endTime ?? undefined,
+      notes: p.notes ?? undefined,
     })),
     equipments: rdo.equipments.map((e) => ({
       name: e.name,
       identifier: e.identifier ?? undefined,
-      quantity: e.quantity,
       operator: e.operator ?? undefined,
-      hours: e.hours ?? undefined,
+      startTime: e.startTime ?? undefined,
+      endTime: e.endTime ?? undefined,
       status: e.status,
+      notes: e.notes ?? undefined,
     })),
     weather: rdo.weather
       ? {

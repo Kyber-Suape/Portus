@@ -2,7 +2,7 @@ import { rdosService } from "@/services/rdos.service";
 import { worksService } from "@/services/works.service";
 import type { RdoStatus } from "@/types/rdo";
 
-const PENDING_STATUSES: RdoStatus[] = ["SENT_TO_REVIEW", "UNDER_EXTERNAL_REVIEW", "UNDER_SUAPE_REVIEW"];
+const PENDING_STATUSES: RdoStatus[] = ["SENT_TO_REVIEW", "UNDER_REVIEW", "CHANGES_REQUESTED"];
 const CONTRACT_EXPIRATION_WINDOW_DAYS = 30;
 const OVERDUE_DRAFT_DAYS = 2;
 
