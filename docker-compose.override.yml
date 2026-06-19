@@ -1,0 +1,19 @@
+# Aplicado automaticamente pelo Docker Compose em `docker compose up` (sem `-f`).
+# Não é necessário (nem recomendado) copiar este arquivo para a VPS — lá, o
+# `docker-compose.yml` sozinho já sobe a stack de produção.
+services:
+  web:
+    build:
+      target: dev
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - next_cache:/app/.next
+    command: sh -c "pnpm install --frozen-lockfile && node_modules/.bin/next dev -H 0.0.0.0 -p ${FRONTEND_PORT:-3000}"
+
+volumes:
+  node_modules:
+  next_cache:

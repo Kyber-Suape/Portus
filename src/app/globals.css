@@ -1,26 +1,127 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* SUAPE institutional brand tokens — paleta "Technical Modernity" (navy + verde técnico) */
+  --color-primary-50: #eef3f8;
+  --color-primary-100: #d7e3ef;
+  --color-primary-200: #aec8e0;
+  --color-primary-300: #84accf;
+  --color-primary-400: #5e8cb8;
+  --color-primary-500: #3c6a98;
+  --color-primary-600: #1d3f63;
+  --color-primary-700: #122c47;
+  --color-primary-800: #0a1d30;
+  --color-primary-900: #001629;
+
+  --color-accent-50: #fff8e6;
+  --color-accent-100: #ffeec0;
+  --color-accent-200: #ffe092;
+  --color-accent-300: #ffd060;
+  --color-accent-400: #fdbf3a;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d9830a;
+  --color-accent-700: #b06405;
+  --color-accent-800: #8a4d04;
+  --color-accent-900: #623703;
+
+  --color-background: #faf9fc;
+  --color-surface: #ffffff;
+  --color-foreground: #1a1c1e;
+  --color-muted: #42474d;
+  --color-muted-foreground: #5b6066;
+  --color-border: #dadadd;
+
+  --color-success-50: #e8f7ef;
+  --color-success-500: #10b981;
+  --color-success-600: #00714d;
+
+  --color-warning-50: #fff8e6;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #b06405;
+
+  --color-danger-50: #fdecea;
+  --color-danger-500: #ba1a1a;
+  --color-danger-600: #93000a;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-primary-50: var(--color-primary-50);
+  --color-primary-100: var(--color-primary-100);
+  --color-primary-200: var(--color-primary-200);
+  --color-primary-300: var(--color-primary-300);
+  --color-primary-400: var(--color-primary-400);
+  --color-primary-500: var(--color-primary-500);
+  --color-primary-600: var(--color-primary-600);
+  --color-primary-700: var(--color-primary-700);
+  --color-primary-800: var(--color-primary-800);
+  --color-primary-900: var(--color-primary-900);
+  --color-primary: var(--color-primary-600);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-accent-50: var(--color-accent-50);
+  --color-accent-100: var(--color-accent-100);
+  --color-accent-200: var(--color-accent-200);
+  --color-accent-300: var(--color-accent-300);
+  --color-accent-400: var(--color-accent-400);
+  --color-accent-500: var(--color-accent-500);
+  --color-accent-600: var(--color-accent-600);
+  --color-accent-700: var(--color-accent-700);
+  --color-accent-800: var(--color-accent-800);
+  --color-accent-900: var(--color-accent-900);
+  --color-accent: var(--color-accent-500);
+
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-foreground: var(--color-foreground);
+  --color-muted: var(--color-muted);
+  --color-muted-foreground: var(--color-muted-foreground);
+  --color-border: var(--color-border);
+
+  --color-success-50: var(--color-success-50);
+  --color-success-500: var(--color-success-500);
+  --color-success-600: var(--color-success-600);
+  --color-success: var(--color-success-500);
+
+  --color-warning-50: var(--color-warning-50);
+  --color-warning-500: var(--color-warning-500);
+  --color-warning-600: var(--color-warning-600);
+  --color-warning: var(--color-warning-500);
+
+  --color-danger-50: var(--color-danger-50);
+  --color-danger-500: var(--color-danger-500);
+  --color-danger-600: var(--color-danger-600);
+  --color-danger: var(--color-danger-500);
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-sora);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+@layer utilities {
+  .focus-ring {
+    outline: none;
+  }
+  .focus-ring:focus-visible {
+    outline: 2px solid var(--color-primary-600);
+    outline-offset: 2px;
+  }
+}
+
+@keyframes sidebar-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.sidebar-enter {
+  animation: sidebar-enter 250ms ease-out;
 }

@@ -1,0 +1,48 @@
+import type { Pendencia } from "@/types/dashboard";
+
+export const MOCK_PENDENCIAS: Pendencia[] = [
+  {
+    id: "pnd-001",
+    tipo: "correcao",
+    titulo: "RDO - Atrasado (2 dias)",
+    obraNome: "Dragagem do Canal de Acesso Norte — Contrato #442",
+    rdoNumero: "RDO-1042",
+    prazo: "2026-06-16",
+    prioridade: "alta",
+    responsavel: "Carlos M. (Consórcio X)",
+    acaoLabel: "Cobrar",
+  },
+  {
+    id: "pnd-002",
+    tipo: "aprovacao",
+    titulo: "Aprovação Necessária",
+    obraNome: "Pátio de Contêineres — Contrato #129",
+    rdoNumero: "RDO-1041",
+    prazo: "2026-06-18",
+    prioridade: "alta",
+    responsavel: "Fiscal SUAPE (Você)",
+    acaoLabel: "Revisar",
+  },
+  {
+    id: "pnd-003",
+    tipo: "assinatura",
+    titulo: "Aguardando Assinatura",
+    obraNome: "Recuperação Estrutural do Píer 4 — Contrato #88",
+    rdoNumero: "RDO-1040",
+    prazo: "2026-06-19",
+    prioridade: "media",
+    responsavel: "Eng. Roberto",
+    acaoLabel: "Aguardar",
+  },
+  {
+    id: "pnd-004",
+    tipo: "revisao",
+    titulo: "Revisão do Fiscal Externo pendente",
+    obraNome: "Pavimentação da Via de Acesso Industrial",
+    rdoNumero: "RDO-1039",
+    prazo: "2026-06-20",
+    prioridade: "baixa",
+    responsavel: "Consultoria Técnica Recife",
+    acaoLabel: "Acompanhar",
+  },
+];
